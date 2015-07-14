@@ -155,7 +155,6 @@ results   = pool.map(get_links, links)
 skippable = list(skip())
 results   = list(chain.from_iterable( (res['video_link'],res['pdf_link']) for res in results if res['name'] + '.mp4' not in skippable))
 results   = [resource for resource in results if resource is not None] # no need to start a thread for a non-existent resource
-#print("Found: " + ''.join(results))
 
 print('''About to download {} resources. This may take a long time depending on your bandwidth...'''.format(len(results)))
 
