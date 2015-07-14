@@ -104,7 +104,7 @@ def get_links(resource):
     except AttributeError:
         resource['video_link'] = None
     try:
-        resource['pdf_link'] = {"name":resource['name'],"link":pdf_field.li['data-url']}
+        resource['pdf_link']   = {"name":resource['name'],"link":pdf_field.li['data-url']}
     except AttributeError:
         resource['pdf_link'] = None
     return resource
