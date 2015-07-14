@@ -47,6 +47,7 @@ import argparse
 import sys
 from multiprocessing.dummy import Pool as ThreadPool
 from BeautifulSoup import BeautifulSoup
+from itertools import chain
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-u', '--username', help='Cisco Live 365 Username', type=str)
@@ -99,11 +100,11 @@ def get_links(resource):
     video_field = video_soup.find('ul', {'id' : 'mediaList'})
     pdf_field = video_soup.find('ul', {'id' : 'fileDownloadList'})
     try:
-        resource['video_link'] = video_field.li.a['data-url']
+        resource['video_link'] = {"name":resource['name'],"link":video_field.li.a['data-url']}
     except AttributeError:
         resource['video_link'] = None
     try:
-        resource['pdf_link']= pdf_field.li['data-url']
+        resource['pdf_link'] = {"name":resource['name'],"link":pdf_field.li['data-url']}
     except AttributeError:
         resource['pdf_link'] = None
     return resource
@@ -117,26 +118,21 @@ def download_resource((n_job, resource)):
     downloaded.
 
     '''
+    resource_identifier = name_scrubber(resource["name"] + "." + resource["link"].split(".")[-1])
+    print('Starting job_id {}. Session {}'.format(n_job, resource_identifier))
 
-    print('Starting job_id {}. Session {}'.format(n_job, resource['name']))
+    try:
+      video = requests.get(resource["link"], stream=True)
+      with open(resource_identifier, 'wb') as vfh:
+          for chunk in video.iter_content(chunk_size=1024):
+              if chunk:
+                  vfh.write(chunk)
+                  vfh.flush()
+    except:
+        return
 
-    if resource['video_link']:
-        video = requests.get(resource['video_link'], stream=True)
-        with open(name_scrubber(resource['name'])+'.mp4', 'wb') as vfh:
-            for chunk in video.iter_content(chunk_size=1024):
-                if chunk:
-                    vfh.write(chunk)
-                    vfh.flush()
-
-    if resource['pdf_link']:
-        pdf   = requests.get(resource['pdf_link'], stream=True)
-        with open(name_scrubber(resource['name'])+'.pdf', 'wb') as pfh:
-            for chunk in pdf.iter_content(chunk_size=1024):
-                if chunk:
-                    pfh.write(chunk)
-                    pfh.flush()
-
-    print('Finished job_id {}. Session {}'.format(n_job, resource['name']))
+    files_downloaded.append(resource["link"])
+    print('Finished job_id {}. Session {}'.format(n_job, resource_identifier))
 
 
 def check_current_files():
@@ -157,13 +153,16 @@ def skip():
 pool      = ThreadPool(pool_workers)
 results   = pool.map(get_links, links)
 skippable = list(skip())
-results   = [res for res in results if res['name'] + '.mp4' not in skippable]
+results   = list(chain.from_iterable( (res['video_link'],res['pdf_link']) for res in results if res['name'] + '.mp4' not in skippable))
+results   = [resource for resource in results if resource is not None] # no need to start a thread for a non-existent resource
+#print("Found: " + ''.join(results))
 
 print('''About to download {} resources. This may take a long time depending on your bandwidth...'''.format(len(results)))
 
 print("\n"*3)
 print("#"* 80)
 
-downloads = pool.map(download_resource, enumerate(results, 1))
-
-print('Download job finished. Enjoy! =)')
+files_downloaded = []
+pool.map(download_resource, enumerate(results, 1))
+for file_downloaded in files_downloaded:
+    print("Downloaded: " + file_downloaded)
